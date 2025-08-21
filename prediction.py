@@ -29,31 +29,41 @@ except Exception:
 
 # --- Scraping function ---
 @st.cache_data
+@st.cache_data
 def fetch_forward_data(pair_slug):
     url = f"https://www.fxempire.com/currencies/{pair_slug}/forward-rates"
-    resp = requests.get(url, headers=headers, timeout=10)
-    soup = BeautifulSoup(resp.text, "html.parser")
-    table = soup.find("table", class_="empire-table")
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        print(f"Fetching URL: {url} - Status: {resp.status_code}")
+        if resp.status_code != 200:
+            return pd.DataFrame()
 
-    if not table:
+        soup = BeautifulSoup(resp.text, "html.parser")
+        table = soup.find("table", class_="empire-table")
+        if not table:
+            print("Table not found in page HTML.")
+            print(resp.text[:500])  # Debug snippet
+            return pd.DataFrame()
+
+        rows = table.find("tbody").find_all("tr")
+        data = []
+        for tr in rows:
+            cols = [td.get_text(strip=True) for td in tr.find_all("td")]
+            if len(cols) >= 5:
+                exp, bid, ask, mid, points = cols[:5]
+                data.append({
+                    "Expiration": exp,
+                    "Bid": pd.to_numeric(bid, errors="coerce"),
+                    "Ask": pd.to_numeric(ask, errors="coerce"),
+                    "Mid": pd.to_numeric(mid, errors="coerce"),
+                    "Points": pd.to_numeric(points, errors="coerce"),
+                })
+        return pd.DataFrame(data)
+
+    except Exception as e:
+        print(f"Error fetching data: {e}")
         return pd.DataFrame()
 
-    rows = table.find("tbody").find_all("tr")
-    data = []
-    for tr in rows:
-        cols = [td.get_text(strip=True) for td in tr.find_all("td")]
-        if len(cols) >= 5:
-            exp, bid, ask, mid, points = cols[:5]
-            data.append({
-                "Expiration": exp,
-                "Bid": pd.to_numeric(bid, errors="coerce"),
-                "Ask": pd.to_numeric(ask, errors="coerce"),
-                "Mid": pd.to_numeric(mid, errors="coerce"),
-                "Points": pd.to_numeric(points, errors="coerce"),
-            })
-    print(f"Fetching URL: {url}")
-    print(f"Response status code: {resp.status_code}")
-    return pd.DataFrame(data)
 
 # --- Fetch and display data ---
 df = fetch_forward_data(pair_slug)
