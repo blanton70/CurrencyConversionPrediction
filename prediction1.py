@@ -6,10 +6,10 @@ from bs4 import BeautifulSoup
 import plotly.graph_objects as go
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
+# Page setup
 st.set_page_config(page_title="USD/MXN Forward Rate Forecast", layout="wide")
-st.title("💱 USD/MXN Forward Rate Forecast (Investing.com)")
+st.title("💱 USD/MXN Forward Rate Forecast — Investing.com")
 
-# Use a realistic User-Agent header
 headers = {"User-Agent": "Mozilla/5.0"}
 
 @st.cache_data
@@ -20,36 +20,33 @@ def fetch_forward_data():
         return pd.DataFrame()
 
     soup = BeautifulSoup(resp.text, "html.parser")
-    tables = soup.find_all("table")
-    forward_table = None
-
-    # Select the table that includes both "Bid" and "Ask" headers
-    for table in tables:
-        headers_text = [th.get_text(strip=True).lower() for th in table.find_all("th")]
-        if "bid" in headers_text and "ask" in headers_text:
-            forward_table = table
-            break
-
-    if not forward_table:
+    table = soup.find("table", {"id": "curr_table"})
+    if not table:
         return pd.DataFrame()
 
-    # Parse the rows from the identified table
-    rows = forward_table.find("tbody").find_all("tr")
+    rows = table.find("tbody").find_all("tr")
     data = []
     for tr in rows:
-        cols = [td.get_text(strip=True) for td in tr.find_all("td")]
-        if len(cols) >= 3:
-            tenor, bid_str, ask_str = cols[0], cols[1], cols[2]
-            try:
-                bid = float(bid_str.replace(",", ""))
-                ask = float(ask_str.replace(",", ""))
-            except ValueError:
-                continue
-            mid = (bid + ask) / 2
-            data.append({"Tenor": tenor, "Bid": bid, "Ask": ask, "Mid": mid})
+        cells = tr.find_all("td")
+        if len(cells) < 3:
+            continue
+
+        tenor = cells[1].get_text(strip=True)
+        bid_text = cells[2].get_text(strip=True).replace(",", "")
+        ask_text = cells[3].get_text(strip=True).replace(",", "")
+
+        try:
+            bid = float(bid_text)
+            ask = float(ask_text)
+        except ValueError:
+            continue
+
+        mid = (bid + ask) / 2
+        data.append({"Tenor": tenor, "Bid": bid, "Ask": ask, "Mid": mid})
 
     return pd.DataFrame(data)
 
+# Fetch and show data
 df = fetch_forward_data()
 
 if df.empty:
@@ -58,28 +55,34 @@ else:
     st.write("### USD/MXN Forward Rates")
     st.dataframe(df)
 
-    # ETS Forecasting
     df = df.reset_index(drop=True)
-    ts = df["Mid"]
-    model = ExponentialSmoothing(ts, trend="add", seasonal=None, initialization_method="estimated")
+    df["Index"] = np.arange(len(df))
+
+    # Exponential Smoothing model
+    model = ExponentialSmoothing(
+        df["Mid"], trend="add", seasonal=None, initialization_method="estimated"
+    )
     fit = model.fit()
     forecast_steps = 3
     forecast = fit.forecast(steps=forecast_steps)
-    forecast_tenors = [f"Forecast {i+1}" for i in range(forecast_steps)]
+    forecast_tenors = [f"Forecast +{i+1}" for i in range(forecast_steps)]
 
-    # Build interactive plot
+    # Plot the actual rates and forecast
     fig = go.Figure()
+
     fig.add_trace(go.Scatter(
-        x=df["Tenor"], y=df["Mid"], mode="lines+markers", name="Actual", line=dict(color="lightblue")
+        x=df["Tenor"], y=df["Mid"], mode="lines+markers", name="Observed",
+        line=dict(color="lightblue")
     ))
+
     fig.add_trace(go.Scatter(
         x=forecast_tenors,
         y=forecast,
-        mode="markers+lines+text",
-        name="Forecast",
-        marker=dict(color="red", size=10),
+        mode="lines+markers+text",
         text=[f"{v:.4f}" for v in forecast],
-        textposition="top center"
+        textposition="top center",
+        marker=dict(color="red", size=10),
+        name="Forecast"
     ))
 
     fig.update_layout(
@@ -90,4 +93,5 @@ else:
         paper_bgcolor="#222222",
         font=dict(color="white")
     )
+
     st.plotly_chart(fig, use_container_width=True)
