@@ -51,6 +51,8 @@ def fetch_forward_data(pair_slug):
                 "Mid": pd.to_numeric(mid, errors="coerce"),
                 "Points": pd.to_numeric(points, errors="coerce"),
             })
+    print(f"Fetching URL: {url}")
+    print(f"Response status code: {resp.status_code}")
     return pd.DataFrame(data)
 
 # --- Fetch and display data ---
