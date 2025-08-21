@@ -1,13 +1,13 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import requests
 from bs4 import BeautifulSoup
 import plotly.graph_objects as go
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
+import numpy as np
 
-st.set_page_config(page_title="USD/MXN Forward Rate Forecast (Investing.com)", layout="wide")
-st.title("💱 USD/MXN Forward Rate Forecast (ETS Model) — Investing.com")
+st.set_page_config(page_title="USD/MXN Forward Rate Forecast", layout="wide")
+st.title("💱 USD/MXN Forward Rate Forecast (Investing.com)")
 
 headers = {"User-Agent": "Mozilla/5.0"}
 
@@ -20,11 +20,11 @@ def fetch_forward_data():
 
     soup = BeautifulSoup(resp.text, "html.parser")
     tables = soup.find_all("table")
-    forward_table = None
 
+    forward_table = None
     for table in tables:
         th_texts = [th.get_text(strip=True).lower() for th in table.find_all("th")]
-        if {"bid", "ask", "chg."}.issubset(th_texts):
+        if "bid" in th_texts and "ask" in th_texts:
             forward_table = table
             break
 
@@ -55,34 +55,26 @@ else:
     st.dataframe(df)
 
     df = df.reset_index(drop=True)
-    df["Index"] = np.arange(len(df))
+    # ETS Forecast
+    ts = df["Mid"]
+    model = ExponentialSmoothing(ts, trend="add", seasonal=None, initialization_method="estimated")
+    fit = model.fit()
+    future_steps = 3
+    fc = fit.forecast(steps=future_steps)
+    fc_tenors = [f"Forec {i+1}" for i in range(future_steps)]
 
-    try:
-        model = ExponentialSmoothing(df["Mid"], trend="add", seasonal=None, initialization_method="estimated")
-        fit = model.fit()
-        forecast_steps = 3
-        forecast = fit.forecast(steps=forecast_steps)
-        forecast_tenors = [f"Forecast {i+1}" for i in range(forecast_steps)]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df["Tenor"], y=df["Mid"], mode="lines+markers", name="Actual"))
+    fig.add_trace(go.Scatter(x=fc_tenors, y=fc, mode="lines+markers+text", name="Forecast",
+                             text=[f"{v:.4f}" for v in fc], textposition="top center",
+                             marker=dict(color="red", size=10)))
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=df["Tenor"], y=df["Mid"],
-            mode="lines+markers", name="Observed", line=dict(color="lightblue")
-        ))
-        fig.add_trace(go.Scatter(
-            x=forecast_tenors, y=forecast,
-            mode="markers+lines+text", name="Forecast",
-            marker=dict(color="red", size=10),
-            text=[f"{v:.4f}" for v in forecast], textposition="top center"
-        ))
-        fig.update_layout(
-            title="USD/MXN Forward Mid Rate with ETS Forecast",
-            xaxis_title="Tenor",
-            yaxis_title="Mid Rate",
-            plot_bgcolor="#222",
-            paper_bgcolor="#222",
-            font=dict(color="white"),
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    except Exception as e:
-        st.error(f"Forecasting failed: {e}")
+    fig.update_layout(
+        title="USD/MXN Forward Mid Rate with ETS Forecast",
+        xaxis_title="Tenor",
+        yaxis_title="Mid Rate",
+        plot_bgcolor="#222",
+        paper_bgcolor="#222",
+        font=dict(color="white")
+    )
+    st.plotly_chart(fig, use_container_width=True)
