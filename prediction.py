@@ -27,14 +27,13 @@ try:
 except Exception:
     headers = {"User-Agent": "Mozilla/5.0"}  # Fallback
 
-# --- Scraping function ---
-@st.cache_data
 @st.cache_data
 def fetch_forward_data(pair_slug):
     url = f"https://www.fxempire.com/currencies/{pair_slug}/forward-rates"
     try:
         resp = requests.get(url, headers=headers, timeout=10)
-        print(f"Fetching URL: {url} - Status: {resp.status_code}")
+        # Uncomment for debugging:
+        # print(f"Fetching URL: {url} - Status: {resp.status_code}")
         if resp.status_code != 200:
             return pd.DataFrame()
 
@@ -46,14 +45,15 @@ def fetch_forward_data(pair_slug):
         # Look for the table with the forward rates by checking headers
         forward_table = None
         for table in tables:
-            headers = [th.get_text(strip=True).lower() for th in table.find_all("th")]
-            if "expiration" in headers and "bid" in headers and "mid" in headers:
+            headers_text = [th.get_text(strip=True).lower() for th in table.find_all("th")]
+            if "expiration" in headers_text and "bid" in headers_text and "mid" in headers_text:
                 forward_table = table
                 break
 
         if not forward_table:
-            print("Forward rates table not found.")
-            print(resp.text[:500])  # Debug snippet
+            # Uncomment for debugging:
+            # print("Forward rates table not found.")
+            # print(resp.text[:500])  # Debug snippet
             return pd.DataFrame()
 
         rows = forward_table.find("tbody").find_all("tr")
@@ -72,10 +72,9 @@ def fetch_forward_data(pair_slug):
         return pd.DataFrame(data)
 
     except Exception as e:
-        print(f"Error fetching data: {e}")
+        # Uncomment for debugging:
+        # print(f"Error fetching data: {e}")
         return pd.DataFrame()
-
-
 
 # --- Fetch and display data ---
 df = fetch_forward_data(pair_slug)
@@ -98,8 +97,14 @@ else:
 
     # --- Chart ---
     fig = px.line(df, x="Expiration", y="Mid", title="Forward Mid Rate Curve", markers=True)
-    fig.add_scatter(x=[f"Future({next_idx})"], y=[prediction], mode='markers+text',
-                    text=["Predicted"], name="Prediction", marker=dict(size=10, color="red"))
+    fig.add_scatter(
+        x=[f"Future({next_idx})"],
+        y=[prediction],
+        mode='markers+text',
+        text=["Predicted"],
+        name="Prediction",
+        marker=dict(size=10, color="red")
+    )
 
     fig.update_layout(
         plot_bgcolor='#222',
