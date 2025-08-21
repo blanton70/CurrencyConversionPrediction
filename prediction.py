@@ -39,13 +39,24 @@ def fetch_forward_data(pair_slug):
             return pd.DataFrame()
 
         soup = BeautifulSoup(resp.text, "html.parser")
-        table = soup.find("table", class_="empire-table")
-        if not table:
-            print("Table not found in page HTML.")
+
+        # Find all tables on the page
+        tables = soup.find_all("table")
+
+        # Look for the table with the forward rates by checking headers
+        forward_table = None
+        for table in tables:
+            headers = [th.get_text(strip=True).lower() for th in table.find_all("th")]
+            if "expiration" in headers and "bid" in headers and "mid" in headers:
+                forward_table = table
+                break
+
+        if not forward_table:
+            print("Forward rates table not found.")
             print(resp.text[:500])  # Debug snippet
             return pd.DataFrame()
 
-        rows = table.find("tbody").find_all("tr")
+        rows = forward_table.find("tbody").find_all("tr")
         data = []
         for tr in rows:
             cols = [td.get_text(strip=True) for td in tr.find_all("td")]
@@ -53,16 +64,17 @@ def fetch_forward_data(pair_slug):
                 exp, bid, ask, mid, points = cols[:5]
                 data.append({
                     "Expiration": exp,
-                    "Bid": pd.to_numeric(bid, errors="coerce"),
-                    "Ask": pd.to_numeric(ask, errors="coerce"),
-                    "Mid": pd.to_numeric(mid, errors="coerce"),
-                    "Points": pd.to_numeric(points, errors="coerce"),
+                    "Bid": pd.to_numeric(bid.replace(",", ""), errors="coerce"),
+                    "Ask": pd.to_numeric(ask.replace(",", ""), errors="coerce"),
+                    "Mid": pd.to_numeric(mid.replace(",", ""), errors="coerce"),
+                    "Points": pd.to_numeric(points.replace(",", ""), errors="coerce"),
                 })
         return pd.DataFrame(data)
 
     except Exception as e:
         print(f"Error fetching data: {e}")
         return pd.DataFrame()
+
 
 
 # --- Fetch and display data ---
