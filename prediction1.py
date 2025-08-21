@@ -64,10 +64,7 @@ def fetch_forward_rates(pair_slug):
     return df
 
 
-@st.cache_data
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
+
 
 @st.cache_data
 def fetch_futures(pair_slug):
