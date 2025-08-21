@@ -12,6 +12,7 @@ st.title("💱 FX Forward Rate Prediction App")
 # --- Currency pair map ---
 pairs = {
     "USD/MEX": "usd-mxn",
+    "USD/RUB": "usd-rub",
     "EUR/USD": "eur-usd",
     "USD/JPY": "usd-jpy",
     "GBP/USD": "gbp-usd",
