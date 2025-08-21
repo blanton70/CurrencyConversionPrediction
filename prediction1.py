@@ -21,25 +21,48 @@ forecast_steps = st.sidebar.slider("Forecast Steps", 1, 12, 3)
 headers = {"User-Agent": "Mozilla/5.0"}
 
 @st.cache_data
+@st.cache_data
 def fetch_forward_rates(pair_slug):
-    url = f"https://www.investing.com/currencies/{pair_slug}/forward-rates"
-    resp = requests.get(url, headers=headers, timeout=10)
-    if resp.status_code != 200:
+    url = f"https://www.investing.com/currencies/{pair_slug}-forward-rates"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers, timeout=10)
+
+    if response.status_code != 200:
         return pd.DataFrame()
-    soup = BeautifulSoup(resp.text, "html.parser")
+
+    soup = BeautifulSoup(response.text, "html.parser")
     table = soup.find("table", id="curr_table")
     if not table:
         return pd.DataFrame()
+
     data = []
-    for row in table.find("tbody").find_all("tr"):
-        cols = row.find_all("td")
-        if len(cols) >= 4:
-            tenor = cols[1].get_text(strip=True)
-            bid = float(cols[2].get_text(strip=True).replace(",", ""))
-            ask = float(cols[3].get_text(strip=True).replace(",", ""))
-            mid = (bid + ask) / 2
-            data.append({"Tenor": tenor, "Mid": mid})
-    return pd.DataFrame(data)
+    rows = table.find("tbody").find_all("tr")
+    for row in rows:
+        try:
+            cells = row.find_all("td")
+            name = cells[1].get_text(strip=True).replace('\xa0', ' ')
+            tenor = name.split()[-2]  # Extract ON, 1M, 6M, etc.
+            bid = float(cells[2].text.strip())
+            ask = float(cells[3].text.strip())
+            mid = round((bid + ask) / 2, 6)
+            data.append({
+                "Tenor": tenor,
+                "Name": name,
+                "Bid": bid,
+                "Ask": ask,
+                "Mid": mid,
+            })
+        except (IndexError, ValueError):
+            continue
+
+    df = pd.DataFrame(data)
+    df["Tenor"] = pd.Categorical(df["Tenor"], ordered=True, categories=[
+        "ON", "TN", "SN", "SW", "2W", "3W", "1M", "2M", "3M", "4M", "5M", "6M",
+        "7M", "8M", "9M", "10M", "11M", "1Y", "15M", "2Y", "4Y", "5Y"
+    ])
+    df = df.sort_values("Tenor").reset_index(drop=True)
+    return df
+
 
 @st.cache_data
 def fetch_futures(pair_slug):
