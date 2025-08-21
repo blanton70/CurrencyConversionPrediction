@@ -65,9 +65,52 @@ def fetch_forward_rates(pair_slug):
 
 
 @st.cache_data
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+
+@st.cache_data
 def fetch_futures(pair_slug):
-    # Investing.com's Futures contracts table is JavaScript-rendered—would need Selenium or API.
-    return pd.DataFrame()
+    url = f"https://www.investing.com/currencies/{pair_slug}-contracts"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers, timeout=10)
+
+    if response.status_code != 200:
+        return pd.DataFrame()
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    table = soup.find("table", id="curr_table")
+    if not table:
+        return pd.DataFrame()
+
+    data = []
+    rows = table.find("tbody").find_all("tr")
+    for row in rows:
+        try:
+            cells = row.find_all("td")
+            name = cells[1].get_text(strip=True).replace('\xa0', ' ')
+            bid = float(cells[2].text.strip())
+            ask = float(cells[3].text.strip())
+            high = float(cells[4].text.strip())
+            low = float(cells[5].text.strip())
+            change_text = cells[6].text.strip()
+            # Handle positive and negative change with or without % sign
+            change = float(change_text.replace('%','').replace('+','').replace(',',''))  
+            time = cells[7].text.strip()
+            data.append({
+                "Name": name,
+                "Bid": bid,
+                "Ask": ask,
+                "High": high,
+                "Low": low,
+                "Change": change,
+                "Time": time
+            })
+        except (IndexError, ValueError):
+            continue
+
+    df = pd.DataFrame(data)
+    return df
 
 # Prepare slug for URL
 slug = pair.lower().replace("/", "-")
